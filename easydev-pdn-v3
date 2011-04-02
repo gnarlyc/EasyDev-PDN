@@ -1,0 +1,172 @@
+#!/bin/bash
+# Armin Čoralić http://blog.coralic.nl
+# Part 1 modified by gnarlyc
+# Part 2 created mostly by gnarlyc although I just took the commands from the CM site and made them into a script.
+# Thanks to Conap & Workshed for helping to work out the kinks.
+# Thanks to dsixda for script examples in his kitchen
+
+echo "***********     EasyDev -v3 PDN/CM Edition     **********"
+echo ""
+echo "***********            Team ADX                **********"
+
+echo ""
+echo "***    Installing dependencies    ***"
+echo ""
+add-apt-repository "deb http://archive.canonical.com/ lucid partner"
+apt-get install git-core gnupg flex bison gperf libsdl-dev libesd0-dev libwxgtk2.6-dev squashfs-tools build-essential zip curl libncurses5-dev zlib1g-dev sun-java6-jdk pngcrush
+
+echo ""
+echo "***    Declaring variables    ***"
+echo ""
+export KITCHEN_ROOT=`pwd`
+export VT_REPO=https://github.com/gnarlyc/pdn_vendor_tree.git
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Setting up the folders    ***"
+echo ""
+mkdir -p $KITCHEN_ROOT/EasyDev/CM6/
+
+if [ ! -d $KITCHEN_ROOT/EasyDev/bin ]
+   then
+      mkdir $KITCHEN_ROOT/EasyDev/bin
+fi
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Setting PATH and getting 'repo'    ***"
+echo ""
+export PATH=$PATH:$KITCHEN_ROOT/EasyDev/bin
+curl http://android.git.kernel.org/repo > $KITCHEN_ROOT/EasyDev/bin/repo
+chmod a+x $KITCHEN_ROOT/EasyDev/bin/repo
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Initialize GIT repo    ***"
+echo ""
+cd $KITCHEN_ROOT/EasyDev/CM6
+repo init -u git://github.com/CyanogenMod/android.git -b froyo-stable
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Sync repo    ***"
+echo ""
+repo sync
+
+#read -p " Press enter to continue "
+# Cleanup (optional, but I like to start fresh... Just comment out if you want.)
+echo ""
+echo "***     Cleanup old vendor tree    ***"
+echo ""
+mkdir -p $KITCHEN_ROOT/EasyDev/CM6/device/pandigital
+cd $KITCHEN_ROOT/EasyDev/CM6/device/pandigital/
+rm -rf smdk6410/
+rm -rf pdn_vendor_tree
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Sync vendor tree    ***"
+echo ""
+git clone $VT_REPO
+
+# rename the resulting folder
+mv pdn_vendor_tree/ smdk6410/
+
+# I have already grabbed the needed proprietary files and zipped them up into a zip in a folder above the current folder.
+# There are different ways that you can do this.
+echo ""
+echo "***    Grab proprietary files if you already have them zipped up and in $KITCHEN_ROOT.    ***"
+echo ""
+mkdir -p $KITCHEN_ROOT/EasyDev/CM6/vendor/pandigital/smdk6410/proprietary
+rm -rf $KITCHEN_ROOT/EasyDev/CM6/vendor/pandigital/smdk6410/proprietary/*
+
+cd $KITCHEN_ROOT
+if [ -f proprietary-pdn.zip ]
+   then
+      cp proprietary-pdn.zip $KITCHEN_ROOT/EasyDev/CM6/vendor/pandigital/smdk6410/proprietary
+      cd $KITCHEN_ROOT/EasyDev/CM6/vendor/pandigital/smdk6410/proprietary
+      unzip proprietary-pdn.zip
+else 
+   echo -n "Continue without proprietary-pdn.zip? (y-default/n)"
+   read opt
+   case $opt in
+      n) exit 1;;
+      *) echo "";;
+   esac
+fi
+
+#read -p " Press enter to continue "
+#echo ""
+#read -p " Please place one and only one existing ROM in $KITCHEN_ROOT (enter to continue): "
+#echo ""
+#echo ""
+#echo "***    Copying existing ROM to $KITCHEN_ROOT/EasyDev/CM6/ for unzip-files.sh to process    ***"
+#echo ""
+#cd $KITCHEN_ROOT
+#file=$(ls | grep .zip); mv $file smdk6410_update.zip
+#cp $KITCHEN_ROOT/smdk6410_update.zip $KITCHEN_ROOT/EasyDev/CM6/smdk6410_update.zip
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Run extract-files.sh    ***"
+echo ""
+cd $KITCHEN_ROOT/EasyDev/CM6/device/pandigital/smdk6410
+./extract-files.sh
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Get ROMManager    ***"
+echo ""
+cd $KITCHEN_ROOT/EasyDev/CM6/vendor/cyanogen/
+./get-rommanager
+
+#read -p " Press enter to continue "
+echo ""
+echo -n " Would you like to install Google Apps (y-default/n)? "
+read opt
+case $opt in
+   n) echo ""; echo " Ok, no Google Apps will be installed. "; echo "";;
+   *) echo "***     Installing Google Apps    ***"; ./get-google-files -v MDPI;;
+esac
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Run envsetup.sh    ***"
+echo ""
+cd $KITCHEN_ROOT/EasyDev/CM6
+. build/envsetup.sh
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    lunch    ***"
+echo ""
+lunch generic_smdk6410-userdebug
+
+#read -p " Press enter to continue "
+echo ""
+echo -n " Would you like to 'make clean' (y/n-default)? "
+read opt
+case $opt in
+   y) cd $KITCHEN_ROOT/EasyDev/CM6; make clean;;   
+   *) echo ""; echo " Ok, no 'make clean' will be done."; echo "";;
+esac
+
+#read -p " Press enter to continue "
+echo ""
+echo "***    Compiling CM6    ***"
+echo ""
+cd $KITCHEN_ROOT/EasyDev/CM6
+make -j4 
+
+#read -p " Press enter to continue "
+echo ""
+echo -n " Would you like to run the squisher? (y-default/n)"
+read opt
+   case $opt in 
+      n) exit 1;;
+      *) $KITCHEN_ROOT/EasyDev/CM6/vendor/cyanogen/tools/squisher;;
+   esac
+
+echo ""
+echo "Your ROM is in $KITCHEN_ROOT/EasyDev/CM6/out/target/product/smdk6410 "
+echo ""
